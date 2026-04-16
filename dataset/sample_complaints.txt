@@ -1,0 +1,7 @@
+Sample Complaints for Training:
+
+1. Garbage truck did not come today. Missed pickup.
+2. The bin is overflowing with waste.
+3. General complaint about cleanliness.
+4. Nahi aaya garbage wala. (Hindi for missed pickup)
+5. Bin bhara hua hai. (Bin is full)
