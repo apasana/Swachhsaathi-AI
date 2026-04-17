@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -27,17 +28,34 @@ class WasteImageClassifier:
     def __init__(self, model_path: str | None = None):
         self.model_path = model_path
         self.model = None
+        self.class_names: list[str] = ["Organic", "Recyclable", "Hazardous"]
         self._load_model()
 
     def _load_model(self) -> None:
         if load_model is None or not self.model_path:
             return
         model_file = Path(self.model_path)
+        labels_file = model_file.with_name(f"{model_file.stem}_labels.json")
         if model_file.exists():
             try:
                 self.model = load_model(model_file)
+                loaded_labels = self._load_class_names(labels_file)
+                if loaded_labels:
+                    self.class_names = loaded_labels
             except Exception:
                 self.model = None
+
+    def _load_class_names(self, labels_file: Path) -> list[str] | None:
+        if not labels_file.exists():
+            return None
+        try:
+            payload = json.loads(labels_file.read_text(encoding="utf-8"))
+            class_names = payload.get("class_names", [])
+            if isinstance(class_names, list) and class_names and all(isinstance(name, str) for name in class_names):
+                return class_names
+        except Exception:
+            return None
+        return None
 
     def classify(self, image_input: Any) -> WasteClassificationResult:
         image = self._load_image(image_input)
@@ -72,8 +90,8 @@ class WasteImageClassifier:
         class_index = int(np.argmax(predictions[0]))
         confidence = float(np.max(predictions[0]))
 
-        label_map = {0: "Organic", 1: "Recyclable", 2: "Hazardous"}
-        return WasteClassificationResult(label_map.get(class_index, "Unknown"), round(confidence, 2), "tensorflow")
+        waste_type = self.class_names[class_index] if class_index < len(self.class_names) else "Unknown"
+        return WasteClassificationResult(waste_type, round(confidence, 2), "tensorflow")
 
     def _heuristic_classify(self, image: Image.Image) -> WasteClassificationResult:
         rgb = np.asarray(image, dtype=np.float32)

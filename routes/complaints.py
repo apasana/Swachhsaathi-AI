@@ -3,10 +3,12 @@ from __future__ import annotations
 from fastapi import APIRouter, File, Form, UploadFile
 
 from models.schemas import ComplaintCreate, ComplaintRecord, ComplaintResponse, ComplaintStatus, ComplaintUpdate, TrackingResponse
+from services.ai_service import AIService
 from services.complaint_service import complaint_service
 
 
 router = APIRouter(prefix="/complaints", tags=["Complaints"])
+ai_service = AIService()
 
 
 @router.post("", response_model=ComplaintResponse)
@@ -66,3 +68,19 @@ def track_complaint(ticket_id: str):
 def update_complaint_status(ticket_id: str, payload: ComplaintUpdate):
     complaint = complaint_service.update_status(ticket_id, payload.status.value, payload.assigned_to, payload.authority_notes)
     return ComplaintResponse(message="Complaint status updated", data=ComplaintRecord(**complaint))
+
+
+@router.post("/classify-image")
+async def classify_image(image: UploadFile = File(...)):
+    image_bytes = await image.read()
+    result = ai_service.analyze_image(image_bytes)
+    return {
+        "success": True,
+        "message": "Image classified successfully",
+        "data": {
+            "filename": image.filename,
+            "waste_type": result.get("waste_type", "Unknown"),
+            "confidence": result.get("confidence", 0.0),
+            "source": result.get("source", "unknown"),
+        },
+    }

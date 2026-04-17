@@ -37,6 +37,7 @@ TEXT = {
         "history": "My History",
         "insights": "Insights",
         "manage": "Manage Complaints",
+        "classify": "Waste Classification",
         "refresh": "Refresh",
         "title": "SwachhSaathi AI",
         "caption": "User-side waste reporting and tracking portal",
@@ -93,6 +94,14 @@ TEXT = {
         "update_status": "Update Status",
         "update_ok": "Complaint status updated successfully",
         "update_fail": "Unable to update complaint status",
+        "classify_title": "Authority Waste Classification",
+        "classify_help": "Upload an image to classify waste type using the trained CV model.",
+        "classify_upload": "Upload Waste Image",
+        "classify_now": "Classify Image",
+        "classify_fail": "Image classification failed",
+        "classify_result": "Classification Result",
+        "confidence": "Confidence",
+        "model_source": "Model Source",
     },
     "Hindi": {
         "menu": "स्वच्छसाथी मेनू",
@@ -119,6 +128,7 @@ TEXT = {
         "history": "मेरी हिस्ट्री",
         "insights": "इनसाइट्स",
         "manage": "शिकायत प्रबंधन",
+        "classify": "कचरा वर्गीकरण",
         "refresh": "रिफ्रेश",
         "title": "स्वच्छसाथी AI",
         "caption": "यूज़र साइड वेस्ट रिपोर्टिंग और ट्रैकिंग पोर्टल",
@@ -175,6 +185,14 @@ TEXT = {
         "update_status": "स्थिति अपडेट करें",
         "update_ok": "स्थिति सफलतापूर्वक अपडेट हुई",
         "update_fail": "स्थिति अपडेट नहीं हुई",
+        "classify_title": "अथॉरिटी कचरा वर्गीकरण",
+        "classify_help": "ट्रेंड CV मॉडल से कचरे का प्रकार जानने के लिए इमेज अपलोड करें।",
+        "classify_upload": "कचरे की इमेज अपलोड करें",
+        "classify_now": "इमेज वर्गीकृत करें",
+        "classify_fail": "इमेज वर्गीकरण विफल रहा",
+        "classify_result": "वर्गीकरण परिणाम",
+        "confidence": "विश्वसनीयता",
+        "model_source": "मॉडल स्रोत",
     },
 }
 
@@ -235,6 +253,23 @@ def update_status(base_url: str, ticket_id: str, status: str, assigned_to: str, 
         response = requests.patch(f"{base_url}/complaints/{ticket_id}/status", json=payload, timeout=15)
         response.raise_for_status()
         return True, response.json()
+    except Exception as exc:
+        return False, str(exc)
+
+
+def classify_authority_image(base_url: str, image_file) -> tuple[bool, dict | str]:
+    try:
+        image_bytes = image_file.getvalue()
+        files = {
+            "image": (
+                image_file.name,
+                io.BytesIO(image_bytes),
+                image_file.type or "application/octet-stream",
+            )
+        }
+        response = requests.post(f"{base_url}/complaints/classify-image", files=files, timeout=20)
+        response.raise_for_status()
+        return True, response.json().get("data", {})
     except Exception as exc:
         return False, str(exc)
 
@@ -538,6 +573,29 @@ def render_manage_complaints(base_url: str) -> None:
             st.error(f"{t('update_fail')}: {result}")
 
 
+def render_authority_classification(base_url: str) -> None:
+    st.subheader(t("classify_title"))
+    st.write(t("classify_help"))
+
+    image_file = st.file_uploader(t("classify_upload"), type=["jpg", "jpeg", "png", "webp"], key="authority_classify_upload")
+    if st.button(t("classify_now"), key="authority_classify_btn"):
+        if image_file is None:
+            st.warning(t("classify_upload"))
+            return
+
+        ok, result = classify_authority_image(base_url, image_file)
+        if not ok:
+            st.error(f"{t('classify_fail')}: {result}")
+            return
+
+        st.success(t("classify_result"))
+        c1, c2, c3 = st.columns(3)
+        c1.metric(t("waste"), result.get("waste_type", "Unknown"))
+        c2.metric(t("confidence"), f"{float(result.get('confidence', 0.0)):.2f}")
+        c3.metric(t("model_source"), result.get("source", "unknown"))
+        st.json(result)
+
+
 init_session()
 st.sidebar.title(t("menu"))
 st.session_state.language = st.sidebar.selectbox(t("language"), ["English", "Hindi"], index=0 if st.session_state.language == "English" else 1)
@@ -553,7 +611,7 @@ render_auth_info()
 
 role = st.session_state.auth["role"]
 if role == "authority":
-    page = st.sidebar.radio("Navigate", [t("home"), t("report"), t("track"), t("history"), t("insights"), t("manage")])
+    page = st.sidebar.radio("Navigate", [t("home"), t("report"), t("track"), t("history"), t("insights"), t("manage"), t("classify")])
 else:
     page = st.sidebar.radio("Navigate", [t("home"), t("report"), t("track"), t("history"), t("insights")])
 
@@ -570,5 +628,7 @@ elif page == t("history"):
     render_history(API_BASE_URL)
 elif page == t("insights"):
     render_insights(API_BASE_URL)
+elif page == t("classify"):
+    render_authority_classification(API_BASE_URL)
 else:
     render_manage_complaints(API_BASE_URL)
